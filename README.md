@@ -1,66 +1,99 @@
 # Palagarism_Checker
 
-Document **similarity / plagiarism checker** using bag-of-words frequencies and **cosine similarity**. Logic lives in `Sample-Test1/Header.h`; Google Test cases in `Sample-Test1/test.cpp`.
+Document **similarity** tool: bag-of-words frequencies + **cosine similarity** as a **percentage**. Library-style API (Google Test), not a fancy GUI.
 
-## Overview
+**Logic:** `Sample-Test1/Header.h` (also extracted as `_sources/Plag_Header.h`)  
+**Tests:** `Sample-Test1/test.cpp`  
+[rohaan2802](https://github.com/rohaan2802)
 
-Pipeline for each run:
+---
 
-1. `readInput(path)` — parse a control file: stop-word line, document count, then document paths  
-2. Load each document into `text_read[]`  
-3. `removePunctuationMarks()` → `convertUpperToLowerCase()` → `removeStopWords()`  
-4. `generateFrequencies()` — unique vocabulary + per-document counts  
-5. `calculateAllCosineSimilarities()` — pairwise cosine similarity  
-6. `similarityIn(i, j)` — returns similarity as a **percentage** (0–100)
+## Table of contents
 
-Designed as a unit-tested library API rather than an interactive CLI.
+1. [Caps and globals](#caps-and-globals)
+2. [Pipeline](#pipeline)
+3. [Cosine formula](#cosine-formula)
+4. [Input file format](#input-file-format)
+5. [Test expectations](#test-expectations)
+6. [Build](#build)
+7. [API sketch](#api-sketch)
 
-## Features
+---
 
-- Configurable stop words and multi-document batches via input files  
-- Punctuation stripping and lowercasing  
-- Stop-word filtering  
-- Term frequency vectors and uniqueness tracking  
-- Full similarity matrix; self-similarity is 100%  
-- Sample documents: `document1.txt` … `document6.txt`  
-- Input fixtures: `input.txt`, `input1.txt` … `input5.txt`  
-- Google Test suite (`TEST(PC, …)`): file reading, punctuation, case, stop words, frequencies, plagiarism checks, multi-file reads, line-breaking
+## Caps and globals
 
-Example expectations from tests: documents in `input.txt` score ~**53%** similarity; `input1.txt` pair ~**70.71%**; identical content → **100%**.
+From the header:
 
-## Tech stack
-
-| Component | Technology |
-|-----------|------------|
-| Language | C++ |
-| Testing | Google Test (`pch.h`, `packages.config`, `Sample-Test1.sln`) |
-| Math | `<cmath>` (`pow`, `sqrt`) |
-
-## Project structure
-
-```
-Palagarism_Checker/
-├── Sample-Test1.sln
-└── Sample-Test1/
-    ├── Header.h          # Input_File + NLP/similarity API
-    ├── test.cpp          # Google Test cases
-    ├── pch.h / pch.cpp
-    ├── document1.txt … document6.txt
-    ├── input.txt … input5.txt
-    └── Sample-Test1.vcxproj
+```text
+MAX_WORDS = 1000
+MAX_LINE_LENGTH = 1000
+text_read[10][MAX_WORDS]     // up to 10 documents
+unique_words, frequency[][], simil[][]
 ```
 
-## How to build / run
+`Input_File` holds stop-word list, document paths, `NumberOfDocument`.  
+`set_stopWords` **skips the first 12 characters** of the control line (`for (int i = 12; …)`), then splits on spaces — the input file prefix must match what tests use (e.g. a label like `StopWords: `).
 
-1. Open `Sample-Test1.sln` in Visual Studio (with Google Test / NuGet packages restored via `packages.config`).  
-2. Set working directory to `Sample-Test1` so relative paths like `input1.txt` resolve.  
-3. Build and run tests (Test Explorer or debug the test project).
+---
 
-Command-line GTest builds are possible if you compile `Header.h` usage with the same test runner and link gtest.
+## Pipeline
 
-## Usage
+1. `readInput(path)` — stop-word line, document count, paths → `text_read[]`  
+2. `removePunctuationMarks()`  
+3. `convertUpperToLowerCase()`  
+4. `removeStopWords()`  
+5. `generateFrequencies()` — vocab + per-doc counts  
+6. `calculateAllCosineSimilarities()` — full matrix  
+7. `similarityIn(i, j)` — **0–100** percent (self-similarity 100%)
 
-From tests / your own harness:
+---
+
+## Cosine formula
+
+For frequency vectors **A**, **B**:
+
+```text
+cos θ = (A·B) / (||A|| ||B||)
+percent = cos θ * 100
+```
+
+Implemented with `<cmath>` `pow` / `sqrt`. Empty vectors / zeros need the same guards as in `Header.h` (avoid div-by-zero).
+
+---
+
+## Input file format
+
+1. Stop-word line (parser skips a **fixed 12-char prefix**, then space-separated words).  
+2. Integer document count.  
+3. One filesystem path per document.
+
+Fixtures: `input.txt`, `input1.txt` … `input5.txt`  
+Docs: `document1.txt` … `document6.txt`  
+Working directory must be `Sample-Test1`.
+
+---
+
+## Test expectations
+
+Google Test `TEST(PC, …)` covers: file read, punctuation, case, stop words, frequencies, plagiarism checks, multi-file, line-breaking.
+
+Examples from the suite:
+
+| Fixture | Approx. similarity |
+|---------|-------------------|
+| `input.txt` pair | **~53%** |
+| `input1.txt` pair | **~70.71%** |
+| Identical text | **100%** |
+
+---
+
+## Build
+
+Open `Sample-Test1.sln` (NuGet `packages.config` → Google Test). Test Explorer. pch: `pch.h` / `pch.cpp`.
+
+---
+
+## API sketch
 
 ```cpp
 readInput("input.txt");
@@ -76,22 +109,13 @@ generateFrequencies(uniqueWords, uniqueCount, documentFrequency);
 double** similarities;
 calculateAllCosineSimilarities(similarities, documentFrequency);
 
-double pct = similarityIn(1, 2);  // percent similarity between docs 1 and 2
+double pct = similarityIn(1, 2);
 ```
 
-**Input file format** (as parsed):
+**Extend:** TF–IDF; CLI `main` printing the matrix; raise `MAX_WORDS`; free heap arrays; SHA not needed (this is IR, not hashing).
 
-1. Line starting with stop words (parser skips a fixed prefix then splits on spaces)  
-2. Integer document count  
-3. One path per document  
-
-## How to extend / modify
-
-- Raise `MAX_WORDS` / document caps for larger corpora.  
-- Add TF–IDF weighting instead of raw counts.  
-- Expose a `main()` CLI that prints the similarity matrix.  
-- Free dynamically allocated `uniqueWords` / `similarities` arrays to avoid leaks in long runs.
+---
 
 ## Author
 
-**rohaan2802** — [https://github.com/rohaan2802](https://github.com/rohaan2802)
+**rohaan2802** · [https://github.com/rohaan2802](https://github.com/rohaan2802)
